@@ -6,6 +6,7 @@
 #include "x86.h"
 #include "proc.h"
 #include "spinlock.h"
+#include "sysfunc.h"
 
 struct {
   struct spinlock lock;
@@ -46,6 +47,7 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
+  p->tickets = 1; // Initialize number of tickets.
   release(&ptable.lock);
 
   // Allocate kernel stack if possible.
@@ -144,6 +146,7 @@ fork(void)
   }
   np->sz = proc->sz;
   np->parent = proc;
+  np->tickets = proc->tickets; // Make sure children inherit the number of tickets parents have.
   *np->tf = *proc->tf;
 
   // Clear %eax so that fork returns 0 in the child.
@@ -230,6 +233,7 @@ wait(void)
         p->parent = 0;
         p->name[0] = 0;
         p->killed = 0;
+	p->tickets = 0; // Remove from lottery.
         release(&ptable.lock);
         return pid;
       }
@@ -246,20 +250,6 @@ wait(void)
   }
 }
 
-// Total number of lottery tickets.
-/*int
-lotteryTotal(void)
-{
-  struct proc *p;
-  int total = 0;
-  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
-    if (p->state == RUNNABLE) {
-      total += p->tickets;
-    }
-  }
-  return total;
-}*/
-
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
 // Scheduler never returns.  It loops, doing:
@@ -271,7 +261,6 @@ void
 scheduler(void)
 {
   struct proc *p;
-  //int total_tickets = 0;
 
   for(;;){
     // Enable interrupts on this processor.
@@ -279,7 +268,6 @@ scheduler(void)
 
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
-    //total_tickets = lotteryTotal();
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->state != RUNNABLE)
         continue;
@@ -460,4 +448,43 @@ procdump(void)
   }
 }
 
+int
+sys_settickets(void) // Set number of tickets for a process.
+{
+  int n;
+  if (argint(0, &n) < 0)
+    return -1;
+  if (n < 1)
+    return -1;
+  proc->tickets = n;
+  return 0;
+}
 
+int
+sys_getpinfo(void) // Get information about a process.
+{
+  struct proc *p;
+  struct pstat *process_status;
+
+  if (argptr(0, (void*)&process_status, sizeof(*process_status) < 0))
+    return -1;
+  if (!process_status)
+    return -1;
+
+  int i = 0;
+
+  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++, i++) {
+    
+    process_status->pid[i] = p->pid;
+    process_status->tickets[i] = p->tickets;
+    process_status->ticks[i] = p->ticks;
+    if (p->state != UNUSED) {
+      process_status->inuse[i] = 1;
+    } else {
+      process_status->inuse[i] = 0;
+    }
+
+  }
+
+  return 0;
+}

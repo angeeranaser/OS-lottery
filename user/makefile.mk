@@ -18,7 +18,10 @@ USER_PROGS := \
 	wc\
 	zombie\
 	mytest\
-	setticket
+	setticket\
+	default_tickets\
+	forktickets\
+	getpinfo
 
 USER_PROGS := $(addprefix user/, $(USER_PROGS))
 

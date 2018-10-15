@@ -1,6 +1,7 @@
 #include "types.h"
 #include "defs.h"
 #include "param.h"
+#include "pstat.h"
 #include "mmu.h"
 #include "x86.h"
 #include "proc.h"
@@ -245,6 +246,20 @@ wait(void)
   }
 }
 
+// Total number of lottery tickets.
+/*int
+lotteryTotal(void)
+{
+  struct proc *p;
+  int total = 0;
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    if (p->state == RUNNABLE) {
+      total += p->tickets;
+    }
+  }
+  return total;
+}*/
+
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
 // Scheduler never returns.  It loops, doing:
@@ -256,6 +271,7 @@ void
 scheduler(void)
 {
   struct proc *p;
+  //int total_tickets = 0;
 
   for(;;){
     // Enable interrupts on this processor.
@@ -263,6 +279,7 @@ scheduler(void)
 
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
+    //total_tickets = lotteryTotal();
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->state != RUNNABLE)
         continue;

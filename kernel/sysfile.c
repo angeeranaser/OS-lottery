@@ -1,6 +1,7 @@
 #include "types.h"
 #include "defs.h"
 #include "param.h"
+#include "pstat.h"
 #include "stat.h"
 #include "mmu.h"
 #include "proc.h"
@@ -56,6 +57,16 @@ sys_dup(void)
     return -1;
   filedup(f);
   return fd;
+}
+
+int
+sys_settickets(void)
+{
+  int n;
+  argint(0, &n);
+  if (n < 1)
+    return -1;
+  return 0;
 }
 
 int

@@ -27,6 +27,28 @@ pinit(void)
   initlock(&ptable.lock, "ptable");
 }
 
+static int seed;
+
+void
+set_seed(int new_seed)
+{
+  seed = new_seed;
+}
+
+int
+generate_random(void) // Pseudo-random number generator adapted from christianpinder.com
+{
+  int i;
+  int j = seed;
+
+  i = j / 127773;
+  j = 16807 * (j - i * 127773) - i * 2836;
+  if (j < 0)
+    j += 2147483647;
+  seed = j;
+  return seed;
+}
+
 // Look in the process table for an UNUSED proc.
 // If found, change state to EMBRYO and initialize
 // state required to run in the kernel.
@@ -48,6 +70,7 @@ found:
   p->state = EMBRYO;
   p->pid = nextpid++;
   p->tickets = 1; // Initialize number of tickets.
+  //p->ticks = 0;
   release(&ptable.lock);
 
   // Allocate kernel stack if possible.
@@ -99,7 +122,7 @@ userinit(void)
 
   safestrcpy(p->name, "initcode", sizeof(p->name));
   p->cwd = namei("/");
-
+  p->ticks = 0;
   p->state = RUNNABLE;
   release(&ptable.lock);
 }
@@ -147,6 +170,7 @@ fork(void)
   np->sz = proc->sz;
   np->parent = proc;
   np->tickets = proc->tickets; // Make sure children inherit the number of tickets parents have.
+  np->ticks = 0;
   *np->tf = *proc->tf;
 
   // Clear %eax so that fork returns 0 in the child.
@@ -233,7 +257,6 @@ wait(void)
         p->parent = 0;
         p->name[0] = 0;
         p->killed = 0;
-	p->tickets = 0; // Remove from lottery.
         release(&ptable.lock);
         return pid;
       }
@@ -250,6 +273,21 @@ wait(void)
   }
 }
 
+int
+lottery_total(void)
+{
+  int t = 0;
+  struct proc *p;
+
+  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    if (p->state != RUNNABLE)
+      continue;
+    t += p->tickets;
+  }
+
+  return t;
+}
+
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
 // Scheduler never returns.  It loops, doing:
@@ -261,6 +299,7 @@ void
 scheduler(void)
 {
   struct proc *p;
+  set_seed(5);
 
   for(;;){
     // Enable interrupts on this processor.
@@ -268,23 +307,49 @@ scheduler(void)
 
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
+
+    /*int total = 0; // Total number of lottery tickets.
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->state != RUNNABLE)
-        continue;
+	continue;
+      total += p->tickets;
+      }*/
 
-      // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
-      // before jumping back to us.
-      proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
-      swtch(&cpu->scheduler, proc->context);
-      switchkvm();
-
-      // Process is done running for now.
-      // It should have changed its p->state before coming back.
-      proc = 0;
+    int total = lottery_total();
+    int chosen = 0;
+    
+    if (total > 0) {
+      chosen = generate_random() % total;
+    } else {
+      goto none_runnable;
     }
+
+    int n = 0;
+    for(p = &ptable.proc[0]; p < &ptable.proc[NPROC]; p++){
+      if(p->state != RUNNABLE)
+        continue;
+      n += p->tickets;
+      if (n > chosen) {
+	break;
+      }
+    }
+
+    // Switch to chosen process.  It is the process's job
+    // to release ptable.lock and then reacquire it
+    // before jumping back to us.
+    // p->ticks = total;
+    proc = p;
+    switchuvm(p);
+    p->state = RUNNING;
+    swtch(&cpu->scheduler, proc->context);
+    switchkvm();
+
+    // Process is done running for now.
+    // It should have changed its p->state before coming back.
+    proc = 0;
+    p->ticks += 1;
+
+none_runnable:
     release(&ptable.lock);
 
   }
@@ -451,11 +516,18 @@ procdump(void)
 int
 sys_settickets(void) // Set number of tickets for a process.
 {
+  //int i, n;
+  //struct proc *p;
   int n;
   if (argint(0, &n) < 0)
     return -1;
   if (n < 1)
     return -1;
+  /*for (p = ptable.proc, i = 0; p < &ptable.proc[NPROC]; p++, i++) {
+    if (p->pid == proc->pid) {
+      p->tickets = n;
+    }
+    }*/
   proc->tickets = n;
   return 0;
 }
@@ -463,6 +535,7 @@ sys_settickets(void) // Set number of tickets for a process.
 int
 sys_getpinfo(void) // Get information about a process.
 {
+  int i;
   struct proc *p;
   struct pstat *process_status;
 
@@ -471,9 +544,7 @@ sys_getpinfo(void) // Get information about a process.
   if (!process_status)
     return -1;
 
-  int i = 0;
-
-  for (p = ptable.proc; p < &ptable.proc[NPROC]; p++, i++) {
+  for (p = ptable.proc, i = 0; p < &ptable.proc[NPROC]; p++, i++) {
     
     process_status->pid[i] = p->pid;
     process_status->tickets[i] = p->tickets;

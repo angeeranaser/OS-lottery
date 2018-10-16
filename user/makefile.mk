@@ -21,7 +21,16 @@ USER_PROGS := \
 	setticket\
 	default_tickets\
 	forktickets\
-	getpinfo
+	getpinfo\
+	processesinuse\
+	random\
+	feedback_converge\
+	feedback_diverge\
+	high_sleep\
+	high_tickets\
+	stress_equal\
+	stress_manylow\
+	switch_tickets
 
 USER_PROGS := $(addprefix user/, $(USER_PROGS))
 

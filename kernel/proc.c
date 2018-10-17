@@ -30,7 +30,7 @@ pinit(void)
 static int seed;
 
 void
-set_seed(int new_seed)
+set_seed(int new_seed) // Set seed for PRNG
 {
   seed = new_seed;
 }
@@ -299,6 +299,7 @@ void
 scheduler(void)
 {
   struct proc *p;
+  
   set_seed(5);
 
   for(;;){
@@ -308,18 +309,11 @@ scheduler(void)
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
 
-    /*int total = 0; // Total number of lottery tickets.
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
-	continue;
-      total += p->tickets;
-      }*/
-
-    int total = lottery_total();
+    int total = lottery_total(); // Calculate total tickets for process table.
     int chosen = 0;
     
     if (total > 0) {
-      chosen = generate_random() % total;
+      chosen = generate_random() % total; // Choose a winning ticket.
     } else {
       goto none_runnable;
     }
@@ -330,14 +324,13 @@ scheduler(void)
         continue;
       n += p->tickets;
       if (n > chosen) {
-	break;
+	break; // Break to winning process.
       }
     }
 
     // Switch to chosen process.  It is the process's job
     // to release ptable.lock and then reacquire it
     // before jumping back to us.
-    // p->ticks = total;
     proc = p;
     switchuvm(p);
     p->state = RUNNING;
@@ -516,18 +509,12 @@ procdump(void)
 int
 sys_settickets(void) // Set number of tickets for a process.
 {
-  //int i, n;
-  //struct proc *p;
   int n;
   if (argint(0, &n) < 0)
     return -1;
   if (n < 1)
     return -1;
-  /*for (p = ptable.proc, i = 0; p < &ptable.proc[NPROC]; p++, i++) {
-    if (p->pid == proc->pid) {
-      p->tickets = n;
-    }
-    }*/
+  
   proc->tickets = n;
   return 0;
 }
@@ -546,11 +533,11 @@ sys_getpinfo(void) // Get information about a process.
 
   for (p = ptable.proc, i = 0; p < &ptable.proc[NPROC]; p++, i++) {
     
-    process_status->pid[i] = p->pid;
-    process_status->tickets[i] = p->tickets;
-    process_status->ticks[i] = p->ticks;
+    process_status->pid[i] = p->pid; // PID: process ID
+    process_status->tickets[i] = p->tickets; // Tickets: number of lottery tickets per process
+    process_status->ticks[i] = p->ticks; // Ticks: total number of ticks assigned to each process
     if (p->state != UNUSED) {
-      process_status->inuse[i] = 1;
+      process_status->inuse[i] = 1; // InUse: Whether process is running/runnable.
     } else {
       process_status->inuse[i] = 0;
     }

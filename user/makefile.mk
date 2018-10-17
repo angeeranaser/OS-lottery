@@ -17,7 +17,6 @@ USER_PROGS := \
 	usertests\
 	wc\
 	zombie\
-	mytest\
 	setticket\
 	default_tickets\
 	forktickets\
